@@ -1,5 +1,0 @@
-<launch>
-    <!-- Launch the occupancy_map_generator_node -->
-    <node pkg="occupancy_map_generator" type="occupancy_map_generator_node" name="occupancy_map_generator_node" output="screen">
-    </node>
-</launch>
