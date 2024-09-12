@@ -44,9 +44,7 @@ int main(int argc, char** argv) {
   ros::init(argc, argv, "occupancy_map_generator");
   ros::NodeHandle n("~");
 
-  OccupancyMap occ_map(n,"J1/map_locus");
+  OccupancyMap occ_map(n);
   occ_map.Initialize();
-  occ_map.print_pointcloud();
-  ROS_INFO("Successful printing");
   ros::spin();
 }

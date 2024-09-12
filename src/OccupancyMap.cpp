@@ -33,12 +33,12 @@
 #include "ros/time.h"
 #include <occupancy_map_generator/OccupancyMap.h>
 
-OccupancyMap::OccupancyMap( const ros::NodeHandle &nh_,std::string m_worldFrameId)
+OccupancyMap::OccupancyMap( const ros::NodeHandle &nh_)
 : nodehandle(nh_),
   nodehandle_private(nh_),
-  m_octree(NULL),
   m_res(0.5),
-  m_worldFrameId(m_worldFrameId),
+  concave_alpha(0.1),
+  m_worldFrameId("map"),
   m_occupancyMinZ(-std::numeric_limits<double>::max()),
   m_occupancyMaxZ(std::numeric_limits<double>::max())
 {
@@ -50,10 +50,13 @@ void OccupancyMap::Initialize()
   nodehandle_private.param("map/occupancy_map_min_z", m_occupancyMinZ,m_occupancyMinZ);
   nodehandle_private.param("map/occupancy_map_max_z", m_occupancyMaxZ,m_occupancyMaxZ);
   nodehandle_private.param("map/occupancy_map_resolution", m_res, m_res);
+  nodehandle_private.param("map/concave_tightness", concave_alpha, concave_alpha);
+  nodehandle_private.param("map/frame_id", m_worldFrameId, m_worldFrameId);
   m_mapPub = nodehandle.advertise<nav_msgs::OccupancyGrid>("projected_map", 5, true);
   occupancy_map.info.resolution = m_res;
   ROS_INFO("Occupancy Map with Resolution %f and Z (MinZ,MaxZ) : (%f,%f)",m_res,m_occupancyMinZ,m_occupancyMaxZ);
-  pointCloudSub = nodehandle.subscribe<sensor_msgs::PointCloud2>("/J1/locus/octree_map", 1, &OccupancyMap::pointCloudCallback, this);
+  ROS_INFO("Concave Hull is computed with alpha %f",concave_alpha);
+  pointCloudSub = nodehandle.subscribe<sensor_msgs::PointCloud2>("pointcloud_input", 5, &OccupancyMap::pointCloudCallback, this);
   Cloud = pcl::PointCloud<PointF>::Ptr(new pcl::PointCloud<PointF>);
 }
 
@@ -61,14 +64,13 @@ void OccupancyMap::Initialize()
 void OccupancyMap::pointCloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg)
 {
   pcl::fromROSMsg(*msg, *(this->Cloud));
-  print_pointcloud();
-  publishProjected2DMap();
+  publishProjected2DMap(this->Cloud);
 }
 
 
-void OccupancyMap::publishProjected2DMap(){
+void OccupancyMap::publishProjected2DMap(pcl::PointCloud<PointF>::Ptr Cloud){
   ros::WallTime startTime = ros::WallTime::now();
-  size_t octomapSize = this->Cloud->size();
+  size_t octomapSize = Cloud->size();
   oldMapInfo = occupancy_map.info;
 
   if (octomapSize <= 1){
@@ -76,7 +78,7 @@ void OccupancyMap::publishProjected2DMap(){
     return;
   }
 
-  getOccupiedLimits();
+  getOccupiedLimits(Cloud);
 
   double total_elapsed = (ros::WallTime::now() - startTime).toSec();
   occupancy_map.header.frame_id = m_worldFrameId;
@@ -115,7 +117,7 @@ void OccupancyMap::adjustMapData(nav_msgs::OccupancyGrid& map, const nav_msgs::M
 
 }
 
-void OccupancyMap::getOccupiedLimits()
+void OccupancyMap::getOccupiedLimits(pcl::PointCloud<PointF>::Ptr Cloud)
 {
   filteredVoxelCloud = pcl::PointCloud<PointF>::Ptr(new pcl::PointCloud<PointF>);
   convexCloud = pcl::PointCloud<PointF>::Ptr(new pcl::PointCloud<PointF>);
@@ -131,7 +133,7 @@ void OccupancyMap::getOccupiedLimits()
   pass.filter(*filteredVoxelCloud);
   //get concave points
   chull.setInputCloud(filteredVoxelCloud);
-  chull.setAlpha (0.1);
+  chull.setAlpha (concave_alpha);
   chull.setDimension(2);
   chull.reconstruct(*convexCloud);
   generateOccupancyMap();
@@ -170,10 +172,7 @@ void OccupancyMap::generateOccupancyMap(){
     occupancy_map.info.origin.position.y = min_occupied.y;
     cv::Mat binary_occupancy_map(occupancy_map.info.height,occupancy_map.info.width,CV_8SC1, cv::Scalar(-1));
 
-    for (const auto& occupied_center : *filteredVoxelCloud){      
-      uchar* ptr = binary_occupancy_map.ptr<uchar>(static_cast<unsigned int>(std::abs((occupied_center.y - min_occupied.y))/m_res));
-      ptr[static_cast<unsigned int>(std::abs((occupied_center.x - min_occupied.x))/m_res)] = 100;
-    }
+    
     std::vector<cv::Point> concave_occupancy;
     std::vector<std::vector<cv::Point>> polygons;
     for (const auto& point : polygonVertices) 
@@ -183,6 +182,11 @@ void OccupancyMap::generateOccupancyMap(){
     polygons.push_back(concave_occupancy);
 
     cv::fillPoly(binary_occupancy_map, polygons, cv::Scalar(0));
+
+    for (const auto& occupied_center : *filteredVoxelCloud){      
+      uchar* ptr = binary_occupancy_map.ptr<uchar>(static_cast<unsigned int>(std::abs((occupied_center.y - min_occupied.y))/m_res));
+      ptr[static_cast<unsigned int>(std::abs((occupied_center.x - min_occupied.x))/m_res)] = 100;
+    }
     std::vector<int8_t> occupancyGridData(binary_occupancy_map.begin<uchar>(), binary_occupancy_map.end<uchar>());
     occupancy_map.data = occupancyGridData;
 }

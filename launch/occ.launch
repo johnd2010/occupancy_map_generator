@@ -1,5 +1,15 @@
+
 <launch>
+<group ns="J1">
     <!-- Launch the occupancy_map_generator_node -->
     <node pkg="occupancy_map_generator" type="occupancy_map_generator_node" name="occupancy_map_generator_node" output="screen">
+    <param name="map/occupancy_map_min_z" value="0.5" />
+    <param name="map/occupancy_map_max_z" value="2" />
+    <param name="map/occupancy_map_resolution" value="0.2" />
+    <param name="map/concave_tightness" value="0.9" />
+    <param name="map/frame_id" value="J1/map_locus" />
+    <remap from="occupancy_map_generator_node/pointcloud_input" to="/J1/locus/octree_map"/>
+    <remap from="occupancy_map_generator_node/projected_map" to="/J1/locus/projected_map"/>
     </node>
+</group>
 </launch>

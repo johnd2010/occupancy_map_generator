@@ -43,7 +43,6 @@
 #include <pcl/filters/extract_indices.h>
 #include <pcl/filters/passthrough.h>
 #include <pcl_conversions/pcl_conversions.h>
-#include <pcl/octree/octree_search.h>
 #include <pcl/surface/concave_hull.h>
 #include <opencv2/opencv.hpp>
 #include <pcl/ModelCoefficients.h>
@@ -69,22 +68,16 @@
 class OccupancyMap {
 
 public:
-  // typedef octomap::OcTree OcTreeT;
   typedef pcl::PointXYZINormal PointF;
-  typedef pcl::octree::OctreePointCloudSearch<PointF> Octree;
 
-  OccupancyMap(const ros::NodeHandle &nh_ = ros::NodeHandle(),std::string m_worldFrameId="map");
+  OccupancyMap(const ros::NodeHandle &nh_ = ros::NodeHandle());
 
   void Initialize();
   void reset(const ros::NodeHandle &n,std::string frame);
-  void publishProjected2DMap();
+  void publishProjected2DMap(pcl::PointCloud<PointF>::Ptr Cloud);
   ros::Subscriber m_mapSub;
   ros::Subscriber pointCloudSub;
   pcl::PointCloud<OccupancyMap::PointF>::Ptr Cloud;
-  void print_pointcloud()
-  {
-    ROS_INFO("%zu",Cloud->size());
-  }
 
 
 
@@ -115,7 +108,7 @@ protected:
   }
   //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-  void getOccupiedLimits();
+  void getOccupiedLimits(pcl::PointCloud<PointF>::Ptr Cloud);
   void generateOccupancyMap();
   void pointCloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg);
   
@@ -126,7 +119,6 @@ protected:
   ros::NodeHandle nodehandle_private;
   ros::Publisher  m_mapPub;
 
-  Octree::Ptr m_octree;
   PointF minPt,maxPt;  
   PointF min_occupied,max_occupied;
 
@@ -137,6 +129,7 @@ protected:
   pcl::PassThrough<PointF> pass;
 
   double m_res;
+  double concave_alpha;
 
   double m_occupancyMinZ;
   double m_occupancyMaxZ;
