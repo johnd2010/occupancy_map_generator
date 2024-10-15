@@ -32,7 +32,6 @@ endif()
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   std_msgs
-  core_msgs
   cv_bridge
 )
 

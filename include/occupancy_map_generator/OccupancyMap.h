@@ -68,7 +68,7 @@
 class OccupancyMap {
 
 public:
-  typedef pcl::PointXYZINormal PointF;
+  typedef pcl::PointXYZ PointF;
 
   OccupancyMap(const ros::NodeHandle &nh_ = ros::NodeHandle());
 
@@ -133,6 +133,7 @@ protected:
 
   double m_occupancyMinZ;
   double m_occupancyMaxZ;
+  bool m_explorer_mode;
 
   // downprojected 2D map:
   bool initial_check=true;  

@@ -1,0 +1,17 @@
+
+<launch>
+<arg name="UAV_NAME" default="$(env UAV_NAME)" />
+<group ns="$(arg UAV_NAME)">
+    <!-- Launch the occupancy_map_generator_node -->
+    <node pkg="occupancy_map_generator" type="occupancy_map_generator_node" name="occupancy_map_generator_node" output="screen">
+    <param name="map/occupancy_map_min_z" value="-10" />
+    <param name="map/occupancy_map_max_z" value="10" />
+    <param name="map/explorer_mode" value="true" />
+    <param name="map/occupancy_map_resolution" value="0.5" />
+    <param name="map/concave_tightness" value="0.9" />
+    <param name="map/frame_id" value="$(arg UAV_NAME)/world_origin" />
+    <remap from="occupancy_map_generator_node/pointcloud_input" to="/$(arg UAV_NAME)/octomap_global_vis/octomap_point_cloud_centers"/>
+    <remap from="occupancy_map_generator_node/projected_map" to="/$(arg UAV_NAME)/octomap_server/projected_map"/>
+    </node>
+</group>
+</launch>

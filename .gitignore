@@ -2,3 +2,4 @@ src/.cache/*
 src/.vscode/*
 .vscode/*
 build/*
+.cache/*
