@@ -131,8 +131,8 @@ protected:
   double m_res;
   double concave_alpha;
 
-  double m_occupancyMinZ;
-  double m_occupancyMaxZ;
+  double m_occupancyMinX,m_occupancyMinY,m_occupancyMinZ;
+  double m_occupancyMaxX,m_occupancyMaxY,m_occupancyMaxZ;
   bool m_explorer_mode;
 
   // downprojected 2D map:

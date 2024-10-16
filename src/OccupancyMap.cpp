@@ -39,8 +39,12 @@ OccupancyMap::OccupancyMap( const ros::NodeHandle &nh_)
   m_res(0.5),
   concave_alpha(0.1),
   m_worldFrameId("map"),
+  m_occupancyMinX(-std::numeric_limits<double>::max()),
+  m_occupancyMinY(-std::numeric_limits<double>::max()),
   m_occupancyMinZ(-std::numeric_limits<double>::max()),
   m_explorer_mode(true),
+  m_occupancyMaxX(std::numeric_limits<double>::max()),
+  m_occupancyMaxY(std::numeric_limits<double>::max()),
   m_occupancyMaxZ(std::numeric_limits<double>::max())
 {
   
@@ -49,7 +53,11 @@ OccupancyMap::OccupancyMap( const ros::NodeHandle &nh_)
 void OccupancyMap::Initialize()
 {
   nodehandle_private.param("map/explorer_mode", m_explorer_mode,m_explorer_mode);
+  nodehandle_private.param("map/occupancy_map_min_x", m_occupancyMinX,m_occupancyMinX);
+  nodehandle_private.param("map/occupancy_map_min_y", m_occupancyMinY,m_occupancyMinY);
   nodehandle_private.param("map/occupancy_map_min_z", m_occupancyMinZ,m_occupancyMinZ);
+  nodehandle_private.param("map/occupancy_map_max_x", m_occupancyMaxX,m_occupancyMaxX);
+  nodehandle_private.param("map/occupancy_map_max_y", m_occupancyMaxY,m_occupancyMaxY);
   nodehandle_private.param("map/occupancy_map_max_z", m_occupancyMaxZ,m_occupancyMaxZ);
   nodehandle_private.param("map/occupancy_map_resolution", m_res, m_res);
   nodehandle_private.param("map/concave_tightness", concave_alpha, concave_alpha);
@@ -139,6 +147,14 @@ void OccupancyMap::getOccupiedLimits(pcl::PointCloud<PointF>::Ptr Cloud)
   pass.setFilterLimits(m_occupancyMinZ,m_occupancyMaxZ);
   pass.setInputCloud(downsampledCloud);
   pass.filter(*filteredVoxelCloud);
+  pass.setFilterFieldName("x");
+  pass.setFilterLimits(m_occupancyMinX,m_occupancyMaxX);
+  pass.setInputCloud(filteredVoxelCloud);
+  pass.filter(*filteredVoxelCloud);
+  pass.setFilterFieldName("y");
+  pass.setFilterLimits(m_occupancyMinY,m_occupancyMaxY);
+  pass.setInputCloud(filteredVoxelCloud);
+  pass.filter(*filteredVoxelCloud);
   //get concave points
   ROS_DEBUG("Concave Check");
   chull.setInputCloud(filteredVoxelCloud);
@@ -177,7 +193,6 @@ void OccupancyMap::generateOccupancyMap(){
         ROS_DEBUG("False check");
       }
     }
-    temp_map = occupancy_map;
     occupancy_map.info.width = static_cast<unsigned int>(std::abs((max_occupied.x - min_occupied.x))/m_res);
     occupancy_map.info.height = static_cast<unsigned int>(std::abs((max_occupied.y - min_occupied.y))/m_res);
     occupancy_map.info.resolution = m_res;
