@@ -69,6 +69,7 @@ link_directories(
 )
 
 add_library(${PROJECT_NAME} src/OccupancyMap.cpp
+                            src/MapMerger.cpp
                             )
 target_link_libraries(${PROJECT_NAME}
   ${catkin_LIBRARIES}

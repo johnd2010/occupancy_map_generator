@@ -31,6 +31,7 @@
 #define OCTOMAP_SERVER_OccupancyMap_H
 
 #include <ros/ros.h>
+#include <string>
 #include <visualization_msgs/MarkerArray.h>
 #include <nav_msgs/OccupancyGrid.h>
 
@@ -58,10 +59,25 @@
 #include <pcl/filters/voxel_grid.h>
 #include <sensor_msgs/PointCloud2.h>
 
+#include "opencv2/core/hal/interface.h"
+#include "opencv2/core/mat.hpp"
+#include "opencv2/core/types.hpp"
+#include "opencv2/imgproc.hpp"
+
+
 
 #include <vector>
 #include "pcl/impl/point_types.hpp"
+#include <occupancy_map_generator/MapMerger.h>
+
 #include "ros/console.h"
+//Add communication distance limits, distance topic, uav count
+//Change to params for resolution, height, width , topic names,start and end point
+//if time permits, frame transfomration and params frame_id
+// time permits, merge with obstacles as well, we assume that we are getting a space limited occupancy map
+//Add pose topic for distance calculation
+// Change it for a single agent for real world experiments or add a param for real world experiments that take only the current uav
+//Change to pointers for Occupancy maps
 
 
 
@@ -76,8 +92,11 @@ public:
   void reset(const ros::NodeHandle &n,std::string frame);
   void publishProjected2DMap(pcl::PointCloud<PointF>::Ptr Cloud);
   ros::Subscriber m_mapSub;
+  std::vector<ros::Subscriber> team_occ_map_subscribers;
   ros::Subscriber pointCloudSub;
   pcl::PointCloud<OccupancyMap::PointF>::Ptr Cloud;
+  std::vector<nav_msgs::OccupancyGrid> team_occmaps;
+  bool intialize_merged_occupancy_map=false;
 
 
 
@@ -111,13 +130,15 @@ protected:
   void getOccupiedLimits(pcl::PointCloud<PointF>::Ptr Cloud);
   void generateOccupancyMap();
   void pointCloudCallback(const sensor_msgs::PointCloud2::ConstPtr& msg);
+  void occupancyMapCallback(const nav_msgs::OccupancyGrid::ConstPtr& msg, int i);
+  void invokeMerger();
   
 
 
 
   ros::NodeHandle nodehandle;
   ros::NodeHandle nodehandle_private;
-  ros::Publisher  m_mapPub;
+  ros::Publisher  m_mapPub,mergedPub,m_frontierPub;
 
   PointF minPt,maxPt;  
   PointF min_occupied,max_occupied;
@@ -127,22 +148,28 @@ protected:
   pcl::ConcaveHull<PointF> chull;
   pcl::VoxelGrid<PointF> sor;
   pcl::PassThrough<PointF> pass;
+  cv::Mat merged_occupancy_matrix;
 
-  double m_res;
+
+  double m_res,height=60,width=60;
   double concave_alpha;
+  int uav_count=3;
+  std::string uav_name;
+  std::vector<std::string> team_members;
 
   double m_occupancyMinX,m_occupancyMinY,m_occupancyMinZ;
   double m_occupancyMaxX,m_occupancyMaxY,m_occupancyMaxZ;
-  bool m_explorer_mode;
+  bool m_explorer_mode,m_merger_mode,frontier_detector;
 
   // downprojected 2D map:
   bool initial_check=true;  
 
-  nav_msgs::OccupancyGrid occupancy_map;
+  nav_msgs::OccupancyGrid occupancy_map,merged_occupancy_map;
   nav_msgs::MapMetaData oldMapInfo;
   
   unsigned m_multires2DScale;
   bool m_projectCompleteMap;
+  MapMerger mapmerger;
   
 };
 

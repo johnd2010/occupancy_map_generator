@@ -28,10 +28,14 @@
  */
 
 
+#include "nav_msgs/OccupancyGrid.h"
+#include "opencv2/core.hpp"
 #include "opencv2/core/types.hpp"
 #include "ros/console.h"
+#include "ros/this_node.h"
 #include "ros/time.h"
 #include <occupancy_map_generator/OccupancyMap.h>
+#include <string>
 
 OccupancyMap::OccupancyMap( const ros::NodeHandle &nh_)
 : nodehandle(nh_),
@@ -43,6 +47,8 @@ OccupancyMap::OccupancyMap( const ros::NodeHandle &nh_)
   m_occupancyMinY(-std::numeric_limits<double>::max()),
   m_occupancyMinZ(-std::numeric_limits<double>::max()),
   m_explorer_mode(true),
+  m_merger_mode(true),
+  frontier_detector(true),
   m_occupancyMaxX(std::numeric_limits<double>::max()),
   m_occupancyMaxY(std::numeric_limits<double>::max()),
   m_occupancyMaxZ(std::numeric_limits<double>::max())
@@ -52,6 +58,8 @@ OccupancyMap::OccupancyMap( const ros::NodeHandle &nh_)
 
 void OccupancyMap::Initialize()
 {
+  uav_name = ros::this_node::getNamespace();
+  nodehandle_private.param("map/frontier_detector", frontier_detector,frontier_detector);
   nodehandle_private.param("map/explorer_mode", m_explorer_mode,m_explorer_mode);
   nodehandle_private.param("map/occupancy_map_min_x", m_occupancyMinX,m_occupancyMinX);
   nodehandle_private.param("map/occupancy_map_min_y", m_occupancyMinY,m_occupancyMinY);
@@ -67,6 +75,36 @@ void OccupancyMap::Initialize()
   ROS_INFO("Concave Hull is computed with alpha %f",concave_alpha);
   pointCloudSub = nodehandle.subscribe<sensor_msgs::PointCloud2>("pointcloud_input", 5, &OccupancyMap::pointCloudCallback, this);
   Cloud = pcl::PointCloud<PointF>::Ptr(new pcl::PointCloud<PointF>);
+  nodehandle_private.param("map/merger_mode", m_merger_mode,m_merger_mode);
+  
+  
+  
+  if(m_merger_mode)
+  {
+    std::string OCC_MAP_TOPIC = "octomap_server/merged_map";
+    
+    nodehandle_private.param("explorer/uav_count", uav_count,uav_count);
+    team_members.resize(uav_count-1);
+    team_occmaps.resize(uav_count-1);
+    team_occ_map_subscribers.resize(uav_count-1);
+    merged_occupancy_matrix = cv::Mat::zeros(height/m_res,width/m_res, CV_8S) - 1; //need to get hxw from the params
+    int count = 0;
+    for (size_t id = 1; id <= uav_count; id++)
+    {
+      std::string current_uav_name = "uav"+std::to_string(id);
+      if(uav_name.substr(1) != current_uav_name)
+      {
+        team_members.at(count)=current_uav_name;
+        team_occ_map_subscribers.at(count)=nodehandle.subscribe<nav_msgs::OccupancyGrid>("/"+current_uav_name+"/"+OCC_MAP_TOPIC, 10, [count, this](const nav_msgs::OccupancyGrid::ConstPtr& msg) {OccupancyMap::occupancyMapCallback(msg, count);});
+        count++;
+      }
+    }
+    mergedPub = nodehandle.advertise<nav_msgs::OccupancyGrid>("merged_map", 5, true);
+  }
+  if(frontier_detector)
+  {
+    m_frontierPub = nodehandle.advertise<geometry_msgs::PoseArray>("merged_frontiers", 5, true);
+  }
 }
 
 
@@ -74,6 +112,11 @@ void OccupancyMap::pointCloudCallback(const sensor_msgs::PointCloud2::ConstPtr& 
 {
   pcl::fromROSMsg(*msg, *Cloud);
   publishProjected2DMap(Cloud);
+}
+
+void OccupancyMap::occupancyMapCallback(const nav_msgs::OccupancyGrid::ConstPtr& msg,int id)
+{
+  team_occmaps.at(id)=*msg;
 }
 
 
@@ -97,42 +140,43 @@ void OccupancyMap::publishProjected2DMap(pcl::PointCloud<PointF>::Ptr Cloud){
   occupancy_map.header.stamp = ros::Time::now();
   ROS_DEBUG("Map Ready to publish");
   m_mapPub.publish(occupancy_map);
-  // occupancy_map.data.clear();
   ROS_INFO("Map publishing in OccupancyMap took %f sec", total_elapsed);
+  
+  if(m_merger_mode)
+    {
+      invokeMerger();
+      if(frontier_detector)
+      {
+        ROS_INFO("Frontier detector");
+        m_frontierPub.publish(mapmerger.generateFrontiers(merged_occupancy_matrix.clone(),occupancy_map.header));
+      }
+    }
+  }
+
+void OccupancyMap::invokeMerger()
+{
+  ros::WallTime startTime = ros::WallTime::now();
+      if(!intialize_merged_occupancy_map)
+        {
+          mapmerger.Initialize(nodehandle,team_members);
+          intialize_merged_occupancy_map = true;
+        }
+        merged_occupancy_matrix = mapmerger.AddToFinalMap( occupancy_map, merged_occupancy_matrix);
+        for (size_t other_id = 0;other_id < team_members.size(); ++other_id) 
+        {
+            if(mapmerger.checkDistance(other_id))
+            {
+              merged_occupancy_matrix = mapmerger.AddToFinalMap( team_occmaps.at(other_id), merged_occupancy_matrix);
+            }
+        }
+    mergedPub.publish(mapmerger.return_merged_map(merged_occupancy_matrix));
+  ROS_INFO("Map publishing in OccupancyMap took %f sec", (ros::WallTime::now() - startTime).toSec());
 }
-
-// void OccupancyMap::adjustMapData(nav_msgs::OccupancyGrid& map, const nav_msgs::MapMetaData& oldMapInfo) const{
-
-//   int i_off = int((oldMapInfo.origin.position.x - map.info.origin.position.x)/map.info.resolution +0.5);
-//   int j_off = int((oldMapInfo.origin.position.y - map.info.origin.position.y)/map.info.resolution +0.5);
-
-//   if (i_off < 0 || j_off < 0
-//       || oldMapInfo.width  + i_off > map.info.width
-//       || oldMapInfo.height + j_off > map.info.height)
-//   {
-//     ROS_ERROR("New 2D map does not contain old map area, this case is not implemented");
-//     return;
-//   }
-
-//   nav_msgs::OccupancyGrid::_data_type oldMapData = map.data;
-
-//   map.data.clear();
-//   // init to unknown:
-//   map.data.resize(map.info.width * map.info.height, -1);
-
-//   nav_msgs::OccupancyGrid::_data_type::iterator fromStart, fromEnd, toStart;
-
-//   for (int j =0; j < int(oldMapInfo.height); ++j ){
-//     fromStart = oldMapData.begin() + j*oldMapInfo.width;
-//     fromEnd = fromStart + oldMapInfo.width;
-//     toStart = map.data.begin() + ((j+j_off)*occupancy_map.info.width + i_off);
-//     copy(fromStart, fromEnd, toStart);
-//   }
-
-// }
 
 void OccupancyMap::getOccupiedLimits(pcl::PointCloud<PointF>::Ptr Cloud)
 {
+  // Takes in a pointcloud and limits the cloud and generates an occupancy grid. Explorer word works with MRS 
+
   filteredVoxelCloud = pcl::PointCloud<PointF>::Ptr(new pcl::PointCloud<PointF>);
   convexCloud = pcl::PointCloud<PointF>::Ptr(new pcl::PointCloud<PointF>);
   downsampledCloud = pcl::PointCloud<PointF>::Ptr(new pcl::PointCloud<PointF>);
