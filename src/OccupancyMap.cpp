@@ -103,7 +103,7 @@ void OccupancyMap::Initialize()
   }
   if(frontier_detector)
   {
-    m_frontierPub = nodehandle.advertise<geometry_msgs::PoseArray>("merged_frontiers", 5, true);
+    m_frontierPub = nodehandle.advertise<visualization_msgs::MarkerArray>("merged_frontiers", 5, true);
   }
 }
 
@@ -148,7 +148,7 @@ void OccupancyMap::publishProjected2DMap(pcl::PointCloud<PointF>::Ptr Cloud){
       if(frontier_detector)
       {
         ROS_INFO("Frontier detector");
-        m_frontierPub.publish(mapmerger.generateFrontiers(merged_occupancy_matrix.clone(),occupancy_map.header));
+        m_frontierPub.publish(mapmerger.generateFrontiers(merged_occupancy_matrix,occupancy_map.header));
       }
     }
   }

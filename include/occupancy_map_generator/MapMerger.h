@@ -64,16 +64,19 @@ public:
   std::vector<nav_msgs::OccupancyGrid::ConstPtr> occupancy_maps;
   std::vector<std::string> uav_names;
   std:: string current_name;
+  cv::Rect extreme_bounding_box;
 
   nav_msgs::OccupancyGrid Initialize(const ros::NodeHandle &nh_,std::vector<std::string> uav_names);
   std::vector<cv::Point> interpolateLine(const cv::Point& p1, const cv::Point& p2,float resolution);
+  std::vector<float> mass_array;
   void Merge(nav_msgs::OccupancyGrid::ConstPtr map);
   bool checkDistance(int  other_id);
-  geometry_msgs::PoseArray generateFrontiers(cv::Mat matrix,std_msgs::Header header);
+  visualization_msgs::MarkerArray generateFrontiers(cv::Mat matrix,std_msgs::Header header);
   void reset(const ros::NodeHandle &n,std::string frame);
-  geometry_msgs::PoseArray frontier_generator(std::vector<std::vector<cv::Point>> contours,std_msgs::Header header);
+  visualization_msgs::MarkerArray frontier_generator(std::vector<std::vector<cv::Point>> contours,std_msgs::Header header,cv::Mat matrix);
   cv::Mat AddToFinalMap(nav_msgs::OccupancyGrid current_occupancy_map,cv::Mat merged_occupancy_matrix);
   nav_msgs::OccupancyGrid return_merged_map(cv::Mat merged_occupancy_matrix);
+  float mass_calculator(cv::Mat matrix,cv::Point point);
   ros::Subscriber m_mapSub;
 
 
@@ -91,7 +94,9 @@ protected:
 
 
   double concave_alpha;
-  double m_res=0.5,height=60,width=60,origin_x=0,origin_y=0,distance=50;
+  double m_res=0.5,height=60,width=60,origin_x=0,origin_y=0,distance=50,resolution=0.5,extreme_square = 5;
+  int mass_square = 5;
+  bool enable_frontier_weights = true;
 
 
   double m_occupancyMinX,m_occupancyMinY,m_occupancyMinZ;
@@ -112,5 +117,10 @@ protected:
   std::string topic;
   std::vector<geometry_msgs::PoseArray> frontier_pose_arrays;
   cv::Mat mergedContours;
+  visualization_msgs::MarkerArray current_marker_array;
+  visualization_msgs::Marker current_marker;
+  cv::Mat temp_matrix_frontier;
+  float mass;
+  float max_mass;
 };
 

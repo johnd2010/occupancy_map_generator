@@ -77,7 +77,7 @@
 // time permits, merge with obstacles as well, we assume that we are getting a space limited occupancy map
 //Add pose topic for distance calculation
 // Change it for a single agent for real world experiments or add a param for real world experiments that take only the current uav
-//Change to pointers for Occupancy maps
+//Change to pointers for Occupancy maps, and CV matrices
 
 
 

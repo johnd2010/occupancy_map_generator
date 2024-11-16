@@ -33,29 +33,20 @@
 #include "geometry_msgs/PoseStamped.h"
 #include "nav_msgs/OccupancyGrid.h"
 #include "opencv2/core.hpp"
+#include "opencv2/core/mat.hpp"
 #include "opencv2/core/types.hpp"
 #include "opencv2/imgproc.hpp"
 #include "ros/console.h"
+#include <algorithm>
 #include <occupancy_map_generator/MapMerger.h>
 #include <string>
 #include <vector>
+#include "ros/duration.h"
 #include "ros/forwards.h"
+#include "ros/time.h"
 #include "std_msgs/String.h"
-
-// MapMerger::MapMerger( const ros::NodeHandle &nh_,std::vector<std::string> uav_names)
-// : nodehandle(nh_),
-//   uav_names(uav_names),
-//   nodehandle_private(nh_),
-//   worldFrameId("map")
-//   // m_occupancyMinX(-std::numeric_limits<double>::min()),
-//   // m_occupancyMinY(-std::numeric_limits<double>::min()),
-//   // m_occupancyMinZ(-std::numeric_limits<double>::min()),
-//   // m_occupancyMaxX(std::numeric_limits<double>::max()),
-//   // m_occupancyMaxY(std::numeric_limits<double>::max()),
-//   // m_occupancyMaxZ(std::numeric_limits<double>::max())
-// {
-  
-// }
+#include "visualization_msgs/Marker.h"
+#include "visualization_msgs/MarkerArray.h"
 
 nav_msgs::OccupancyGrid MapMerger::Initialize(const ros::NodeHandle &nh_,std::vector<std::string> uav_names)
 // void MapMerger::Initialize(const ros::NodeHandle &nh_,std::vector<std::string> uav_names,int current_uav,nav_msgs::OccupancyGrid::ConstPtr current_occupancy_map)
@@ -63,6 +54,22 @@ nav_msgs::OccupancyGrid MapMerger::Initialize(const ros::NodeHandle &nh_,std::ve
   nodehandle = nh_;
   nodehandle_private = nh_;
   current_name = ros::this_node::getNamespace().substr(1);
+  
+  //Unchanging Marker parameters 
+  current_marker.pose.orientation.x = 0;
+  current_marker.pose.orientation.y = 0;
+  current_marker.pose.orientation.z = 0;
+  current_marker.pose.orientation.w = 1;
+  current_marker.scale.x=1;
+  current_marker.scale.y=1;
+  current_marker.scale.z=1;
+  current_marker.color.a= 1;
+  current_marker.color.r= 1;
+  current_marker.color.g= 1;
+  current_marker.color.b= 1;
+  current_marker.lifetime = ros::Duration();
+  current_marker.type = current_marker.SPHERE;
+
   // nodehandle_private.param("map/occupancy_map_min_x", m_occupancyMinX,m_occupancyMinX);
   // nodehandle_private.param("map/occupancy_map_min_y", m_occupancyMinY,m_occupancyMinY);
   // nodehandle_private.param("map/occupancy_map_min_z", m_occupancyMinZ,m_occupancyMinZ);
@@ -80,34 +87,11 @@ nav_msgs::OccupancyGrid MapMerger::Initialize(const ros::NodeHandle &nh_,std::ve
   merged_occupancy_map.info.resolution = m_res;
   merged_occupancy_map.info.origin.position.x = origin_x;
   merged_occupancy_map.info.origin.position.y = origin_y;
+  extreme_bounding_box.x = 5*m_res;
+  extreme_bounding_box.y = 5*m_res;
+  extreme_bounding_box.width = merged_occupancy_map.info.width-1;
+  extreme_bounding_box.height = merged_occupancy_map.info.height-1;
   mergedContours = cv::Mat::zeros(height/m_res,width/m_res, CV_8UC1);  //blank image for contour processing
-
-
-  // merged_occupancy_matrix.resize(uav_names.size());
-  // merged_occupancy_map.resize(uav_names.size());
-  // frontier_pose_arrays.resize(uav_names.size());
-  
-  // marker_array_publishers.resize(uav_names.size());
-  // random_publisher.resize(uav_names.size());
-
-
-  // for (size_t id = 0; id < uav_names.size(); ++id)
-  // {
-  //   occupancy_maps[id] = nullptr;
-  //   merged_occupancy_matrix[id] = cv::Mat::zeros(height/m_res,width/m_res, CV_8S)-1; //need to get hxw from the params
-  //   merged_occupancy_map[id].header.frame_id=uav_names[id]+"/world_origin";
-  //   merged_occupancy_map[id].info.height = height/m_res;
-  //   merged_occupancy_map[id].info.width = width/m_res;
-  //   merged_occupancy_map[id].info.resolution = m_res;
-  //   merged_occupancy_map[id].info.origin.position.x = origin_x;
-  //   merged_occupancy_map[id].info.origin.position.y = origin_y;
-  //   frontier_pose_arrays[id].header.frame_id = uav_names[id]+"/world_origin";
-  //   topic = "/"+ uav_names[id] + "/octomap_server/projected_map";
-  //   ROS_DEBUG("%s",topic.c_str());
-  //   // map_publishers.push_back(nodehandle.advertise<nav_msgs::OccupancyGrid>("/"+uav_names[id]+"/merged_map", 5, true));
-  //   marker_array_publishers.push_back(nodehandle.advertise<geometry_msgs::PoseStamped>("/"+uav_names[id]+"/frontiers",1, true));
-  //   random_publisher.push_back(nodehandle.advertise<std_msgs::String>("/"+uav_names[id]+"/string",0));
-  // }
   return merged_occupancy_map;
 }
 
@@ -117,48 +101,7 @@ bool MapMerger::checkDistance(int  other_id) //Add pose topic
 return true;
 }
 
-void assign_map(nav_msgs::OccupancyGrid::ConstPtr current_occupancy_map, int id)
-{
-}
 
-
-// void MapMerger::Merge(nav_msgs::OccupancyGrid::ConstPtr current_occupancy_map)
-// {
-//   int id = 0;
-//   //add communication constraint here
-//   ros::WallTime startTime = ros::WallTime::now();
-//   merged_occupancy_map[id].header.stamp = ros::Time::now();
-//   AddToFinalMap( current_occupancy_map, id);
-//   for (size_t other_id = 0;other_id < uav_names.size(); ++other_id) 
-//   {
-//     if(id!=other_id)
-//     {
-//       if(checkDistance(id,other_id))
-//       {
-//         AddToFinalMap( current_occupancy_map, other_id);
-//       }
-//     }
-//   }
-//   std::vector<std::vector<cv::Point>> contours = generateFrontiers(merged_occupancy_matrix[id].clone(),id);
-//   std::vector<int8_t> occupancyGridData(merged_occupancy_matrix[id].begin<uchar>(), merged_occupancy_matrix[id].end<uchar>());
-//   merged_occupancy_map[id].data = occupancyGridData;
-//   // map_publishers[id].publish(merged_occupancy_map[id]);
-//   std_msgs::String msg;
-//   msg.data = uav_names[id].c_str();
-  
-//   random_publisher[id].publish(msg);
-  
-//   frontier_pose_arrays[id] = frontier_generator(contours,merged_occupancy_map[id].header);
-//   geometry_msgs::PoseStamped pose;
-//   pose.header = merged_occupancy_map[id].header;
-//   marker_array_publishers[id].publish(pose);
-//   // ROS_INFO_STREAM(frontier_pose_arrays[id]);
-//   ROS_INFO_STREAM(pose);
-//   ROS_INFO("%f",frontier_pose_arrays[id].poses.at(0).position.x);
-//   ros::WallDuration totalElapsed = ros::WallTime::now() - startTime;
-//   ROS_INFO("Merging the maps took %f seconds", totalElapsed.toSec());
-
-// }
 
 cv::Mat MapMerger::AddToFinalMap(nav_msgs::OccupancyGrid current_occupancy_map,cv::Mat merged_occupancy_matrix)
 {
@@ -180,27 +123,31 @@ nav_msgs::OccupancyGrid MapMerger::return_merged_map(cv::Mat merged_occupancy_ma
     return merged_occupancy_map;
 }
 
-geometry_msgs::PoseArray MapMerger::generateFrontiers(cv::Mat matrix,std_msgs::Header header)
+visualization_msgs::MarkerArray MapMerger::generateFrontiers(cv::Mat matrix,std_msgs::Header header)
 {
-    matrix.setTo(255, matrix == 0);
-    matrix.setTo(0, matrix == -1);
-    matrix.convertTo(matrix, CV_8UC1);
+    temp_matrix_frontier = matrix.clone();
+    temp_matrix_frontier.setTo(255, temp_matrix_frontier == 0);
+    temp_matrix_frontier.setTo(0, temp_matrix_frontier == -1);
+    temp_matrix_frontier.convertTo(temp_matrix_frontier, CV_8UC1);
     std::vector<std::vector<cv::Point>> contours;
     std::vector<std::vector<cv::Point>> interpolatedContours;
-    cv::findContours(matrix, contours, cv::RETR_TREE, cv::CHAIN_APPROX_SIMPLE);   
+    cv::findContours(temp_matrix_frontier, contours, cv::RETR_TREE, cv::CHAIN_APPROX_SIMPLE);   
     interpolatedContours.resize(contours.size());
     for (const auto& contour : contours) {
       for (int i=0;i<contour.size();i++)
-      if(i==contour.size()-1)
-        interpolatedContours.push_back(interpolateLine(contour[i],contour[0],0.5));
-      else
-        interpolatedContours.push_back(interpolateLine(contour[i],contour[i+1],0.5));
+      {
+        if(i==contour.size()-1)
+          interpolatedContours.push_back(interpolateLine(contour[i],contour[0],resolution));
+        else
+          interpolatedContours.push_back(interpolateLine(contour[i],contour[i+1],resolution));
+      }
     }
-    return frontier_generator(interpolatedContours,header);
+    return frontier_generator(interpolatedContours,header,matrix);
 }
 
 std::vector<cv::Point> MapMerger::interpolateLine(const cv::Point& p1, const cv::Point& p2,float resolution) {
     std::vector<cv::Point> linePoints;
+    std::vector<float> mass;
     float distance = std::sqrt(std::pow(p2.x - p1.x, 2) + std::pow(p2.y - p1.y, 2));
     int numPoints = static_cast<int>(distance / resolution);
     for (int i = 0; i <= numPoints; ++i) {
@@ -211,18 +158,50 @@ std::vector<cv::Point> MapMerger::interpolateLine(const cv::Point& p1, const cv:
     }
     return linePoints;
 }
-geometry_msgs::PoseArray MapMerger::frontier_generator(std::vector<std::vector<cv::Point>> contours,std_msgs::Header header)
+float MapMerger::mass_calculator(cv::Mat matrix,cv::Point point)
 {
-  geometry_msgs::PoseArray current_pose_array;
-  geometry_msgs::Pose current_pose;
+int x1 = std::max(point.x - mass_square,0);
+int y1 = std::max(point.y - mass_square, 0);
+int x2 = std::min(point.x + mass_square, matrix.cols - 1);
+int y2 = std::min(point.y + mass_square, matrix.rows - 1);
+cv::Rect roi(x1, y1, x2 - x1 + 1, y2 - y1 + 1);
+cv::Mat roiMat = matrix(roi);
+return cv::sum(roiMat)[0]+(roi.size().height*roi.size().width);
+}
+visualization_msgs::MarkerArray MapMerger::frontier_generator(std::vector<std::vector<cv::Point>> contours,std_msgs::Header header,cv::Mat matrix)
+{
+  current_marker_array.markers.clear();
+  int count = 0;
+  mass_array.clear();
+  max_mass = 0;
   for (const auto& contour : contours) {
-    for (const cv::Point& point : contour) {
-      current_pose.position.x = point.x * m_res;
-      current_pose.position.y = point.y * m_res;
-      current_pose_array.poses.push_back(current_pose);
+    for (const cv::Point& point : contour) 
+    {
+      if(extreme_bounding_box.contains(point))
+        {
+          if(enable_frontier_weights)
+            {
+              mass_array.push_back(mass_calculator( matrix, point));
+              max_mass = std::max(max_mass,mass_array.back());
+            }
+          current_marker.pose.position.x = point.x * m_res;
+          current_marker.pose.position.y = point.y * m_res;
+          current_marker.header = header;
+          current_marker.header.stamp = ros::Time::now();
+          current_marker.id = count++;
+          current_marker_array.markers.push_back(current_marker);
+        }
       }
     }
-  current_pose_array.header = header;
-  
-  return current_pose_array;
+    if(enable_frontier_weights)
+    {
+      for(int i=0; i < mass_array.size();i++)
+      {
+        current_marker_array.markers[i].scale.x = mass_array[i]/max_mass;
+        current_marker_array.markers[i].scale.y = mass_array[i]/max_mass;
+        current_marker_array.markers[i].scale.z = mass_array[i]/max_mass;
+        current_marker.header.stamp = ros::Time::now();        
+      }
+    }
+  return current_marker_array;
 }
