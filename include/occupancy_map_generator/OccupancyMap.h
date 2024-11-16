@@ -71,7 +71,7 @@
 #include <occupancy_map_generator/MapMerger.h>
 
 #include "ros/console.h"
-//Add communication distance limits, distance topic, uav count
+//Add communication distance limits, distance topic, uav count, enable initialization
 //Change to params for resolution, height, width , topic names,start and end point
 //if time permits, frame transfomration and params frame_id
 // time permits, merge with obstacles as well, we assume that we are getting a space limited occupancy map
@@ -151,9 +151,9 @@ protected:
   cv::Mat merged_occupancy_matrix;
 
 
-  double m_res,height=60,width=60;
+  double map_resolution,height,width;
   double concave_alpha;
-  int uav_count=3;
+  int uav_count;
   std::string uav_name;
   std::vector<std::string> team_members;
 

@@ -40,7 +40,7 @@
 OccupancyMap::OccupancyMap( const ros::NodeHandle &nh_)
 : nodehandle(nh_),
   nodehandle_private(nh_),
-  m_res(0.5),
+  map_resolution(0.5),
   concave_alpha(0.1),
   m_worldFrameId("map"),
   m_occupancyMinX(-std::numeric_limits<double>::max()),
@@ -59,7 +59,10 @@ OccupancyMap::OccupancyMap( const ros::NodeHandle &nh_)
 void OccupancyMap::Initialize()
 {
   uav_name = ros::this_node::getNamespace();
-  nodehandle_private.param("map/frontier_detector", frontier_detector,frontier_detector);
+  nodehandle_private.param("/explorer/area/h", height,height);
+  nodehandle_private.param("/explorer/area/w", width,width);
+  
+  nodehandle_private.param("frontier_detector/frontier_detector", frontier_detector,frontier_detector);
   nodehandle_private.param("map/explorer_mode", m_explorer_mode,m_explorer_mode);
   nodehandle_private.param("map/occupancy_map_min_x", m_occupancyMinX,m_occupancyMinX);
   nodehandle_private.param("map/occupancy_map_min_y", m_occupancyMinY,m_occupancyMinY);
@@ -67,15 +70,15 @@ void OccupancyMap::Initialize()
   nodehandle_private.param("map/occupancy_map_max_x", m_occupancyMaxX,m_occupancyMaxX);
   nodehandle_private.param("map/occupancy_map_max_y", m_occupancyMaxY,m_occupancyMaxY);
   nodehandle_private.param("map/occupancy_map_max_z", m_occupancyMaxZ,m_occupancyMaxZ);
-  nodehandle_private.param("map/occupancy_map_resolution", m_res, m_res);
+  nodehandle_private.param("map/occupancy_map_resolution", map_resolution, map_resolution);
   nodehandle_private.param("map/concave_tightness", concave_alpha, concave_alpha);
   nodehandle_private.param("map/frame_id", m_worldFrameId, m_worldFrameId);
   m_mapPub = nodehandle.advertise<nav_msgs::OccupancyGrid>("projected_map", 5, true);
-  ROS_INFO("Occupancy Map with Resolution %f and Z (MinZ,MaxZ) : (%f,%f)",m_res,m_occupancyMinZ,m_occupancyMaxZ);
+  ROS_INFO("Occupancy Map with Resolution %f and Z (MinZ,MaxZ) : (%f,%f)",map_resolution,m_occupancyMinZ,m_occupancyMaxZ);
   ROS_INFO("Concave Hull is computed with alpha %f",concave_alpha);
   pointCloudSub = nodehandle.subscribe<sensor_msgs::PointCloud2>("pointcloud_input", 5, &OccupancyMap::pointCloudCallback, this);
   Cloud = pcl::PointCloud<PointF>::Ptr(new pcl::PointCloud<PointF>);
-  nodehandle_private.param("map/merger_mode", m_merger_mode,m_merger_mode);
+  nodehandle_private.param("map_merger/merger_mode", m_merger_mode,m_merger_mode);
   
   
   
@@ -83,11 +86,12 @@ void OccupancyMap::Initialize()
   {
     std::string OCC_MAP_TOPIC = "octomap_server/merged_map";
     
-    nodehandle_private.param("explorer/uav_count", uav_count,uav_count);
+    nodehandle_private.param("/explorer/uav_count", uav_count,uav_count);
+    ROS_INFO("%f %f %d",height,width,uav_count);
     team_members.resize(uav_count-1);
     team_occmaps.resize(uav_count-1);
     team_occ_map_subscribers.resize(uav_count-1);
-    merged_occupancy_matrix = cv::Mat::zeros(height/m_res,width/m_res, CV_8S) - 1; //need to get hxw from the params
+    merged_occupancy_matrix = cv::Mat::zeros(height/map_resolution,width/map_resolution, CV_8S) - 1; //need to get hxw from the params
     int count = 0;
     for (size_t id = 1; id <= uav_count; id++)
     {
@@ -123,7 +127,7 @@ void OccupancyMap::occupancyMapCallback(const nav_msgs::OccupancyGrid::ConstPtr&
 void OccupancyMap::publishProjected2DMap(pcl::PointCloud<PointF>::Ptr Cloud){
   ros::WallTime startTime = ros::WallTime::now();
   size_t octomapSize = Cloud->size();
-  occupancy_map.info.resolution = m_res;
+  occupancy_map.info.resolution = map_resolution;
   // oldMapInfo = occupancy_map.info;
 
   if (octomapSize <= 1){
@@ -144,11 +148,19 @@ void OccupancyMap::publishProjected2DMap(pcl::PointCloud<PointF>::Ptr Cloud){
   
   if(m_merger_mode)
     {
+      mapmerger.map_resolution = map_resolution;
+      mapmerger.height = height;
+      mapmerger.width = width;
       invokeMerger();
       if(frontier_detector)
       {
-        ROS_INFO("Frontier detector");
+        ros::WallTime startTime = ros::WallTime::now();
+        nodehandle_private.param("frontier_detector/enable_frontier_weights",mapmerger.enable_frontier_weights,mapmerger.enable_frontier_weights);
+        nodehandle_private.param("frontier_detector/extreme_square",mapmerger.extreme_square,mapmerger.extreme_square);
+        nodehandle_private.param("frontier_detector/frontier_resolution",mapmerger.frontier_resolution,mapmerger.frontier_resolution);
+        nodehandle_private.param("frontier_detector/mass_square",mapmerger.mass_square,mapmerger.mass_square);
         m_frontierPub.publish(mapmerger.generateFrontiers(merged_occupancy_matrix,occupancy_map.header));
+        ROS_INFO("Frontier publishing took %f sec", (ros::WallTime::now() - startTime).toSec());
       }
     }
   }
@@ -158,7 +170,7 @@ void OccupancyMap::invokeMerger()
   ros::WallTime startTime = ros::WallTime::now();
       if(!intialize_merged_occupancy_map)
         {
-          mapmerger.Initialize(nodehandle,team_members);
+          mapmerger.Initialize(nodehandle,team_members);          
           intialize_merged_occupancy_map = true;
         }
         merged_occupancy_matrix = mapmerger.AddToFinalMap( occupancy_map, merged_occupancy_matrix);
@@ -183,7 +195,7 @@ void OccupancyMap::getOccupiedLimits(pcl::PointCloud<PointF>::Ptr Cloud)
   //downsample pointcloud
   ROS_DEBUG("Downsampling");
   sor.setInputCloud(this->Cloud);
-  sor.setLeafSize(m_res,m_res,m_res);
+  sor.setLeafSize(map_resolution,map_resolution,map_resolution);
   sor.filter(*downsampledCloud);
   //crop pointcloud
   ROS_DEBUG("Cropping");
@@ -237,9 +249,9 @@ void OccupancyMap::generateOccupancyMap(){
         ROS_DEBUG("False check");
       }
     }
-    occupancy_map.info.width = static_cast<unsigned int>(std::abs((max_occupied.x - min_occupied.x))/m_res);
-    occupancy_map.info.height = static_cast<unsigned int>(std::abs((max_occupied.y - min_occupied.y))/m_res);
-    occupancy_map.info.resolution = m_res;
+    occupancy_map.info.width = static_cast<unsigned int>(std::abs((max_occupied.x - min_occupied.x))/map_resolution);
+    occupancy_map.info.height = static_cast<unsigned int>(std::abs((max_occupied.y - min_occupied.y))/map_resolution);
+    occupancy_map.info.resolution = map_resolution;
     occupancy_map.info.origin.position.x = min_occupied.x;
     occupancy_map.info.origin.position.y = min_occupied.y;
     ROS_DEBUG("occupancy map ready");
@@ -249,7 +261,7 @@ void OccupancyMap::generateOccupancyMap(){
     ROS_DEBUG("CV processing");
     for (const auto& point : polygonVertices) 
     {
-      concave_occupancy.push_back(cv::Point((std::abs((point.x - min_occupied.x))/m_res),(std::abs((point.y - min_occupied.y))/m_res)));
+      concave_occupancy.push_back(cv::Point((std::abs((point.x - min_occupied.x))/map_resolution),(std::abs((point.y - min_occupied.y))/map_resolution)));
     }
     polygons.push_back(concave_occupancy);
     ROS_DEBUG("CV processing complete");
@@ -258,8 +270,8 @@ void OccupancyMap::generateOccupancyMap(){
     if(!m_explorer_mode)
     {
       for (const auto& occupied_center : *filteredVoxelCloud){      
-        uchar* ptr = binary_occupancy_map.ptr<uchar>(static_cast<unsigned int>(std::abs((occupied_center.y - min_occupied.y))/m_res));
-        ptr[static_cast<unsigned int>(std::abs((occupied_center.x - min_occupied.x))/m_res)] = 100;
+        uchar* ptr = binary_occupancy_map.ptr<uchar>(static_cast<unsigned int>(std::abs((occupied_center.y - min_occupied.y))/map_resolution));
+        ptr[static_cast<unsigned int>(std::abs((occupied_center.x - min_occupied.x))/map_resolution)] = 100;
       }
     }
     

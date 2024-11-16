@@ -50,7 +50,7 @@
 
 
 //Add communication distance limits
-//Change to params for resolution, height, width , topic names,start and end point
+//Change to params for resolution, distance=50,resolution=0.5,extreme_square = 5
 //if time permits, frame transfomration and params frame_id
 // time permits, merge with obstacles as well, we assume that we are getting a space limited occupancy map
 //Add pose topic for distance calculation
@@ -78,6 +78,11 @@ public:
   nav_msgs::OccupancyGrid return_merged_map(cv::Mat merged_occupancy_matrix);
   float mass_calculator(cv::Mat matrix,cv::Point point);
   ros::Subscriber m_mapSub;
+  bool enable_frontier_weights;
+  double map_resolution,height,width,frontier_resolution,extreme_square;
+  int mass_square;
+  double origin_x=0,origin_y=0,distance=50;
+
 
 
 
@@ -94,9 +99,7 @@ protected:
 
 
   double concave_alpha;
-  double m_res=0.5,height=60,width=60,origin_x=0,origin_y=0,distance=50,resolution=0.5,extreme_square = 5;
-  int mass_square = 5;
-  bool enable_frontier_weights = true;
+
 
 
   double m_occupancyMinX,m_occupancyMinY,m_occupancyMinZ;

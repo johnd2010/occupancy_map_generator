@@ -4,19 +4,31 @@
 <group ns="$(arg UAV_NAME)">
     <!-- Launch the occupancy_map_generator_node -->
     <node pkg="occupancy_map_generator" type="occupancy_map_generator_node" name="occupancy_map_generator_node" output="screen">
-    <param name="map/occupancy_map_min_z" value="-10" />
     <param name="map/occupancy_map_min_x" value="0" />
     <param name="map/occupancy_map_min_y" value="0" />
-    <param name="map/occupancy_map_max_z" value="10" />
+    <param name="map/occupancy_map_min_z" value="-10" />
     <param name="map/occupancy_map_max_x" value="60" />
     <param name="map/occupancy_map_max_y" value="60" />
+    <param name="map/occupancy_map_max_z" value="10" />
     <param name="map/uav_name" value="$(arg UAV_NAME)" />
-    <param name="map/explorer_mode" value="true" />
-    <param name="map/merger_mode" value="true" />
-    <param name="map/frontier_detector" value="true" />
     <param name="map/occupancy_map_resolution" value="0.5" />
     <param name="map/concave_tightness" value="0.9" />
     <param name="map/frame_id" value="$(arg UAV_NAME)/world_origin" />
+    <!-- Ignores occupied cells in occupancy map when true-->
+    <param name="map/explorer_mode" value="true" />
+    <!-- Enables Map Merging-->
+    <param name="map_merger/merger_mode" value="true" />
+    <!-- Enables Frontier detector -->
+    <param name="frontier_detector/frontier_detector" value="true" />  
+    <!-- Enables Frontier Weights Normalization wrt max else 1-->
+    <param name="frontier_detector/enable_frontier_weights" value="true" />    
+    <!-- To trim out extreme frontiers along the edge of the map-->
+    <param name="frontier_detector/extreme_square" value="5.0" />    
+    <!-- Resolution when interpolating frontiers-->
+    <param name="frontier_detector/frontier_resolution" value="0.5" />   
+    <!-- Square around to calculate frontier weights-->
+    <param name="frontier_detector/mass_square" value="5" />    
+    
     <remap from="occupancy_map_generator_node/pointcloud_input" to="/$(arg UAV_NAME)/octomap_global_vis/octomap_point_cloud_centers"/>
     <remap from="occupancy_map_generator_node/projected_map" to="/$(arg UAV_NAME)/octomap_server/projected_map"/>
     <remap from="occupancy_map_generator_node/merged_map" to="/$(arg UAV_NAME)/octomap_server/merged_map"/>
