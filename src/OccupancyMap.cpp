@@ -87,7 +87,7 @@ void OccupancyMap::Initialize()
     std::string OCC_MAP_TOPIC = "octomap_server/merged_map";
     
     nodehandle_private.param("/explorer/uav_count", uav_count,uav_count);
-    ROS_INFO("%f %f %d",height,width,uav_count);
+    ROS_INFO("height : %f width : %f UAV count : %d",height,width,uav_count);
     team_members.resize(uav_count-1);
     team_occmaps.resize(uav_count-1);
     team_occ_map_subscribers.resize(uav_count-1);
@@ -192,28 +192,30 @@ void OccupancyMap::getOccupiedLimits(pcl::PointCloud<PointF>::Ptr Cloud)
   filteredVoxelCloud = pcl::PointCloud<PointF>::Ptr(new pcl::PointCloud<PointF>);
   convexCloud = pcl::PointCloud<PointF>::Ptr(new pcl::PointCloud<PointF>);
   downsampledCloud = pcl::PointCloud<PointF>::Ptr(new pcl::PointCloud<PointF>);
-  //downsample pointcloud
-  ROS_DEBUG("Downsampling");
-  sor.setInputCloud(this->Cloud);
-  sor.setLeafSize(map_resolution,map_resolution,map_resolution);
-  sor.filter(*downsampledCloud);
+
   //crop pointcloud
   ROS_DEBUG("Cropping");
   pass.setFilterFieldName("z");
   pass.setFilterLimits(m_occupancyMinZ,m_occupancyMaxZ);
-  pass.setInputCloud(downsampledCloud);
+  pass.setInputCloud(this->Cloud);
   pass.filter(*filteredVoxelCloud);
   pass.setFilterFieldName("x");
-  pass.setFilterLimits(m_occupancyMinX,m_occupancyMaxX);
+  //Needed to do m_occupancyMaxX+1 and m_occupancyMaxY+1 for a proper cropping. Else the limits were mismatched. Alternate solution welcomed
+  pass.setFilterLimits(m_occupancyMinX,m_occupancyMaxX+1);
   pass.setInputCloud(filteredVoxelCloud);
   pass.filter(*filteredVoxelCloud);
   pass.setFilterFieldName("y");
-  pass.setFilterLimits(m_occupancyMinY,m_occupancyMaxY);
+  pass.setFilterLimits(m_occupancyMinY,m_occupancyMaxY+1);
   pass.setInputCloud(filteredVoxelCloud);
   pass.filter(*filteredVoxelCloud);
+  //downsample pointcloud
+  ROS_DEBUG("Downsampling");
+  sor.setInputCloud(filteredVoxelCloud);
+  sor.setLeafSize(map_resolution,map_resolution,map_resolution);
+  sor.filter(*downsampledCloud);
   //get concave points
   ROS_DEBUG("Concave Check");
-  chull.setInputCloud(filteredVoxelCloud);
+  chull.setInputCloud(downsampledCloud);
   chull.setAlpha(concave_alpha);
   chull.setDimension(2);
   chull.reconstruct(*convexCloud);

@@ -111,10 +111,6 @@ nav_msgs::OccupancyGrid MapMerger::return_merged_map(cv::Mat merged_occupancy_ma
 
 visualization_msgs::MarkerArray MapMerger::generateFrontiers(cv::Mat matrix,std_msgs::Header header)
 {
-    extreme_bounding_box.x = extreme_square*map_resolution;
-    extreme_bounding_box.y = extreme_square*map_resolution;
-    extreme_bounding_box.width = merged_occupancy_map.info.width-1;
-    extreme_bounding_box.height = merged_occupancy_map.info.height-1;
     temp_matrix_frontier = matrix.clone();
     temp_matrix_frontier.setTo(255, temp_matrix_frontier == 0);
     temp_matrix_frontier.setTo(0, temp_matrix_frontier == -1);
@@ -167,8 +163,12 @@ visualization_msgs::MarkerArray MapMerger::frontier_generator(std::vector<std::v
   for (const auto& contour : contours) {
     for (const cv::Point& point : contour) 
     {
-      if(extreme_bounding_box.contains(point))
+      if(point.x>1 && point.y>1 && point.x<matrix.cols-2 && point.y<matrix.rows-2)
         {
+          ROS_INFO("%d",matrix.cols);
+          ROS_INFO("%d",matrix.rows);
+          ROS_INFO("%d",point.x);
+          ROS_INFO("%d",point.y);
           if(enable_frontier_weights)
             {
               mass_array.push_back(mass_calculator( matrix, point));
